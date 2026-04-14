@@ -559,7 +559,13 @@
     <button class="nav-btn" onclick="showTab('order')">申请代打</button>
     <button class="nav-btn" id="adminBtn" style="display:none" onclick="showTab('admin')">管理后台</button>
     <button class="nav-btn" id="authBtn" onclick="showTab('auth')">登录</button>
-    <button class="nav-btn" id="logoutBtn" style="display:none" onclick="logout()">退出</button>
+    <div id="userInfo" style="display:none;align-items:center;gap:0.6rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);border-radius:2px;padding:0.3rem 0.7rem">
+        <span style="width:7px;height:7px;background:#88dd99;border-radius:50%;display:inline-block"></span>
+        <span id="navUserEmail" style="font-size:0.78rem;color:var(--accent);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      </div>
+      <button class="nav-btn" onclick="logout()">退出</button>
+    </div>
   </div>
 </nav>
 
@@ -751,7 +757,8 @@ async function initAuth() {
 function setUser(user) {
   currentUser = user;
   document.getElementById('authBtn').style.display = 'none';
-  document.getElementById('logoutBtn').style.display = 'inline-block';
+  document.getElementById('userInfo').style.display = 'flex';
+  document.getElementById('navUserEmail').textContent = user.email;
   if (user.email === ADMIN_EMAIL) {
     document.getElementById('adminBtn').style.display = 'inline-block';
   }
@@ -761,7 +768,7 @@ function setUser(user) {
 function clearUser() {
   currentUser = null;
   document.getElementById('authBtn').style.display = 'inline-block';
-  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('userInfo').style.display = 'none';
   document.getElementById('adminBtn').style.display = 'none';
 }
 
@@ -804,7 +811,7 @@ async function handleAuth() {
   } else {
     const { data, error: e } = await sb.auth.signInWithPassword({ email, password });
     error = e;
-    if (!e) { showTab('schedule'); }
+    if (!e) { showAlert('authAlert', 'success', '登录成功！正在跳转...'); setTimeout(() => showTab('schedule'), 1200); }
   }
 
   if (error) showAlert('authAlert', 'error', error.message);
