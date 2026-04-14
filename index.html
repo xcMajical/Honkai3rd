@@ -713,9 +713,52 @@
     </div>
 
     <div class="admin-section">
+      <div class="admin-title">📅 排期管理</div>
+      <div id="adminSchedules">
+        <div class="loading"><span class="spinner"></span>加载中...</div>
+      </div>
+    </div>
+
+    <div class="admin-section">
       <div class="admin-title">📬 代打订单管理</div>
       <div id="adminOrders">
         <div class="loading"><span class="spinner"></span>加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Schedule Modal -->
+  <div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:2rem;width:90%;max-width:520px;max-height:90vh;overflow-y:auto">
+      <div style="font-family:'Noto Serif SC',serif;color:var(--accent);font-size:1rem;margin-bottom:1.5rem;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">✏️ 编辑排期</div>
+      <input type="hidden" id="edit_id">
+      <div class="form-row">
+        <div class="form-group">
+          <label>期数标题 <span class="required">*</span></label>
+          <input type="text" id="edit_title">
+        </div>
+        <div class="form-group">
+          <label>开始时间</label>
+          <input type="date" id="edit_start">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>结束时间</label>
+          <input type="date" id="edit_end">
+        </div>
+        <div class="form-group">
+          <label>Boss/机制</label>
+          <input type="text" id="edit_boss">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>详细说明</label>
+        <textarea id="edit_desc"></textarea>
+      </div>
+      <div style="display:flex;gap:0.8rem;margin-top:0.5rem">
+        <button class="submit-btn" onclick="saveEdit()" style="flex:1">保存修改</button>
+        <button class="submit-btn" onclick="closeModal()" style="flex:0.4;background:var(--bg3);color:var(--text2);border:1px solid var(--border)">取消</button>
       </div>
     </div>
   </div>
@@ -724,7 +767,7 @@
 <script>
 const SUPABASE_URL = 'https://adnqaaddhtcxtvudhsxa.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_degI4WAl0XeidgbZg1XFkw_Uvrjsjzg';
-const ADMIN_EMAIL = '784306097@qq.com'; // 改成你的管理员邮箱
+const ADMIN_EMAIL = 'admin@yourdomain.com'; // 改成你的管理员邮箱
 
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -740,7 +783,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
 
   if (name === 'schedule') loadSchedule();
-  if (name === 'admin') { loadAdminOrders(); }
+  if (name === 'admin') { loadAdminOrders(); loadAdminSchedules(); }
   if (name === 'order') updateOrderUI();
 }
 
@@ -916,6 +959,75 @@ async function submitOrder() {
   ['gameName','contact','remark'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('server').value = '';
   document.getElementById('floor').value = '';
+}
+
+async function loadAdminSchedules() {
+  const el = document.getElementById('adminSchedules');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>加载中...</div>';
+  const { data, error } = await sb.from('schedules').select('*').order('start_date', { ascending: false });
+  if (error || !data || data.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>暂无排期</div>';
+    return;
+  }
+  const today = new Date().toISOString().split('T')[0];
+  el.innerHTML = `<div style="overflow-x:auto"><table class="orders-table">
+    <thead><tr>
+      <th>期数标题</th><th>开始日期</th><th>结束日期</th><th>Boss/机制</th><th>状态</th><th>操作</th>
+    </tr></thead>
+    <tbody>${data.map(s => {
+      const isCurrent = s.start_date && s.end_date && s.start_date <= today && s.end_date >= today;
+      return `<tr>
+        <td>${esc(s.title)}</td>
+        <td>${s.start_date || '—'}</td>
+        <td>${s.end_date || '—'}</td>
+        <td>${s.boss_info ? esc(s.boss_info) : '<span style="color:var(--text2)">—</span>'}</td>
+        <td><span class="status-badge ${isCurrent ? 'status-done' : 'status-pending'}">${isCurrent ? '当期' : '历史'}</span></td>
+        <td>
+          <button class="action-btn" onclick="editSchedule('${s.id}','${esc(s.title)}','${s.start_date||''}','${s.end_date||''}','${esc(s.boss_info||'')}','${esc(s.description||'')}')">✏️ 编辑</button>
+          <button class="action-btn danger" onclick="deleteSchedule('${s.id}')">🗑 删除</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+function editSchedule(id, title, start, end, boss, desc) {
+  document.getElementById('edit_id').value = id;
+  document.getElementById('edit_title').value = title;
+  document.getElementById('edit_start').value = start;
+  document.getElementById('edit_end').value = end;
+  document.getElementById('edit_boss').value = boss;
+  document.getElementById('edit_desc').value = desc;
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('editModal').style.display = 'none';
+}
+
+async function saveEdit() {
+  const id = document.getElementById('edit_id').value;
+  const title = document.getElementById('edit_title').value.trim();
+  if (!title) return alert('请填写期数标题');
+  const { error } = await sb.from('schedules').update({
+    title,
+    start_date: document.getElementById('edit_start').value || null,
+    end_date: document.getElementById('edit_end').value || null,
+    boss_info: document.getElementById('edit_boss').value.trim() || null,
+    description: document.getElementById('edit_desc').value.trim() || null,
+  }).eq('id', id);
+  if (error) return alert('保存失败：' + error.message);
+  closeModal();
+  loadAdminSchedules();
+  loadSchedule();
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('确定要删除这条排期吗？')) return;
+  const { error } = await sb.from('schedules').delete().eq('id', id);
+  if (error) return alert('删除失败：' + error.message);
+  loadAdminSchedules();
+  loadSchedule();
 }
 
 async function loadAdminOrders() {
